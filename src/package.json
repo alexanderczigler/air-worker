@@ -15,5 +15,9 @@
   "bugs": {
     "url": "https://github.com/alexanderczigler/air-worker/issues"
   },
-  "homepage": "https://github.com/alexanderczigler/air-worker"
+  "homepage": "https://github.com/alexanderczigler/air-worker",
+  "dependencies": {
+    "aws-sdk": "^2.1.21",
+    "elasticsearch": "^4.0.2"
+  }
 }

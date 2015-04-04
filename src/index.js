@@ -24,4 +24,4 @@ s3client.listLogs('', 100, processLogs, handleError);
 setTimeout(function () {
 	console.log('Wait 300 s');
 	s3client.listLogs('', 100, processLogs, handleError);
-}, 300000),
+}, 300000);

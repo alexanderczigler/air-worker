@@ -7,7 +7,8 @@ var client = new elasticsearch.Client({
 
 module.exports = {
   save: function (log) {
-    log.date = log.Date;
+    log.date = "";
+    log.time = "";
     client.index({
       index: config.elasticsearch.index,
       type: 'reading',

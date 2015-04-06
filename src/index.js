@@ -2,6 +2,8 @@ var config = require('./air.config.json');
 var s3client = require('./s3client');
 var esclient = require('./esclient');
 
+var queue = [];
+
 var now = new Date();
 var year = now.getFullYear();
 var month = now.getMonth() + 1;
@@ -11,7 +13,6 @@ var handleError = function (error) {
 };
 
 var processLogs = function (logs) {
-  console.log('Found', logs.length);
   logs.map(function (log) {
     processLog(log);
   });
@@ -19,7 +20,13 @@ var processLogs = function (logs) {
 
 var processLog = function (logMeta) {
   s3client.getLog(logMeta.Key, function (log) {
-    esclient.save(log);
+    queue.push({
+      key: log.id,
+      log: log,
+      processed: false
+    });
+    console.log('Queue has items', queue.length);
+    //esclient.save(log);
   }, handleError);
 };
 
@@ -47,6 +54,16 @@ var processStation = function (station, year, month) {
   }
 };
 
+var takeNext = function (callback) {
+  esclient.save(queue.filter(function (item) {
+    return item.processed;
+  })[0]);
+  setTimeout(function () {
+    callback();
+  }, 200);
+};
+
 config.stations.map(function (station) {
   processStation(station, year, month);
 });
+

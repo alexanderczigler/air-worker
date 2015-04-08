@@ -1,12 +1,12 @@
 var elasticsearch = require('elasticsearch');
-var config = require('./air.config.json');
+var config = require('../air.config.json');
 var client = new elasticsearch.Client({
   host: config.elasticsearch.host + ':' + config.elasticsearch.port,
   log: 'trace'
 });
 
 module.exports = {
-  save: function (log) {
+  save: function (log, successCallback, errorCallback) {
     log.date = "";
     log.time = "";
     client.index({
@@ -15,10 +15,10 @@ module.exports = {
       body: log
     }, function (error, response) {
       if (error) {
-        console.log('Error in esclient.save', error, response);
+        errorCallback(error, response);
       }
       else {
-        console.log('OK', response);
+        successCallback(response, log);
       }
     });
   }

@@ -1,6 +1,6 @@
 var AWS = require('aws-sdk');
 
-var config = require('./air.config.json');
+var config = require('../air.config.json');
 AWS.config.update({accessKeyId: config.aws.accessKeyId, secretAccessKey: config.aws.secretAccessKey});
 
 var s3 = new AWS.S3();

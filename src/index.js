@@ -1,6 +1,7 @@
 var config = require('./air.config.json');
-var s3client = require('./s3client');
-var esclient = require('./esclient');
+
+var s3client = require('./clients/s3');
+var esclient = require('./clients/elasticsearch');
 
 var queue = [];
 
@@ -8,28 +9,36 @@ var now = new Date();
 var year = now.getFullYear();
 var month = now.getMonth() + 1;
 
-var handleError = function (error) {
-  console.log('ERROR', error);
+/*
+ * Error callback.
+ */
+var handleError = function (error, response) {
+  console.log('ERROR', error, response);
 };
 
+/*
+ * Log handling.
+ */
 var processLogs = function (logs) {
-  logs.map(function (log) {
-    processLog(log);
-  });
+  queue = queue.concat(logs);
 };
 
-var processLog = function (logMeta) {
+var processLog = function (logMeta, next) {
   s3client.getLog(logMeta.Key, function (log) {
-    queue.push({
-      key: log.id,
-      log: log,
-      processed: false
-    });
     console.log('Queue has items', queue.length);
-    //esclient.save(log);
+    console.log('log is', log.id);
+    esclient.save(log, function (response, tada) {
+      queue = queue.filter(function (item) {
+        return item.Key != tada.id;
+      });
+      next(next);
+    }, handleError);
   }, handleError);
 };
 
+/*
+ * Create backfill queue.
+ */
 var processStation = function (station, year, month) {
   var monthStr = '';
   if (month < 10) {
@@ -55,15 +64,31 @@ var processStation = function (station, year, month) {
 };
 
 var takeNext = function (callback) {
-  esclient.save(queue.filter(function (item) {
-    return item.processed;
-  })[0]);
-  setTimeout(function () {
-    callback();
-  }, 200);
+  var meow = queue.filter(function (item) {
+    return !item.processed;
+  })[0];
+  console.log('meow', meow);
 };
 
+/*
+ * Run - for each station in config.
+ */
 config.stations.map(function (station) {
   processStation(station, year, month);
 });
 
+var takeNext = (function (next) {
+  var nextItem = queue[0];
+  if (nextItem) {
+    console.log('Have item, will work');
+    processLog(nextItem, next);
+  }
+  else {
+    console.log('Nothing, waiting...');
+    setTimeout(function () {
+      next(next);
+    }, 100);
+  }
+});
+
+takeNext(takeNext);

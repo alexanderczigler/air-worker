@@ -2,12 +2,9 @@ var config = require('./air.config.json');
 
 var s3client = require('./clients/s3');
 var esclient = require('./clients/elasticsearch');
+var stationFilter = require('./modules/stationFilter');
 
 var queue = [];
-
-var now = new Date();
-var year = now.getFullYear();
-var month = now.getMonth() + 1;
 
 /*
  * Error callback.
@@ -23,15 +20,21 @@ var processLogs = function (logs) {
   queue = queue.concat(logs);
 };
 
+var setProcessed = function (queueItem) {
+  queueItem.processing = false;
+  queueItem.processed = true;
+};
+
 var processLog = function (logMeta, next) {
   s3client.getLog(logMeta.Key, function (log) {
-    console.log('Queue has items', queue.length);
-    console.log('log is', log.id);
-    esclient.save(log, function (response, tada) {
-      queue = queue.filter(function (item) {
-        return item.Key != tada.id;
-      });
-      next(next);
+    log = JSON.parse(log);
+    delete log.date;
+    delete log.time;
+    if (next) {
+      next();
+    }
+    esclient.save(log, function (response) {
+      
     }, handleError);
   }, handleError);
 };
@@ -39,56 +42,60 @@ var processLog = function (logMeta, next) {
 /*
  * Create backfill queue.
  */
-var processStation = function (station, year, month) {
-  var monthStr = '';
-  if (month < 10) {
-    monthStr = '0' + month;
-  } else {
-    monthStr = month;
-  }
-
-  for (var i = 1; i <= 31; i++) {
-    var f = i;
+var processStation = function (station, next) {
+  for (var i = 31; i > 0; i--) {
+    var suffix = i;
     if (i < 10) {
-      f = '0' + f;
+      suffix = '0' + suffix;
     }
-    var filter = station + '.' + year + monthStr + f;
-    console.log('Processing filter', filter);
-    s3client.listLogs(filter, 3500, processLogs, handleError);
-  }
-  if (year > 2013 && month <= 1) {
-    processStation(station, year - 1, 12);
-  } else if (year > 2013) {
-    processStation(station, year, month - 1);
+    var filter = stationFilter.filterString(station + '.', suffix);
+    s3client.listLogs(filter, 3500, function (logs) {
+      processLogs(logs);
+      next();
+    }, handleError);
   }
 };
 
-var takeNext = function (callback) {
-  var meow = queue.filter(function (item) {
-    return !item.processed;
-  })[0];
-  console.log('meow', meow);
-};
 
-/*
- * Run - for each station in config.
- */
-config.stations.map(function (station) {
-  processStation(station, year, month);
-});
 
-var takeNext = (function (next) {
-  var nextItem = queue[0];
-  if (nextItem) {
-    console.log('Have item, will work');
-    processLog(nextItem, next);
-  }
-  else {
-    console.log('Nothing, waiting...');
-    setTimeout(function () {
-      next(next);
-    }, 100);
+var takeNext = (function () {
+  var i = 0;
+  for (var item in queue) {
+    if (!queue[item].processed && !queue[item].processing) {
+      queue[item].processing = true;
+      var queueItem = queue[item];
+      processLog(queueItem, setProcessed(queueItem));
+      if (i > 10) {
+        break;
+      }
+      i++;
+    }
   }
 });
 
-takeNext(takeNext);
+// Run.
+setInterval(function () {
+  
+  console.log('items in queue: ', queue.length);
+  console.log('           new: ', queue.filter(function (item) { return !item.processed; }).length);
+  console.log('     processed: ', queue.filter(function (item) { return item.processed; }).length);
+  console.log('    processing: ', queue.filter(function (item) { return item.processing; }).length);
+  console.log();
+
+  // Queue.
+  if (queue.filter(function (item) { return item.processing; }).length <= 0) {
+    takeNext();
+  }
+
+  // Backfill.
+  if (queue.filter(function (item) { return !item.processed; }).length <= 0) {
+    config.stations.map(function (station) {
+      processStation(station, function () {
+        if (stationFilter.year >= 2013) {
+          stationFilter.stepBack();
+        }
+      });
+    });
+  }
+  
+}, 1000);

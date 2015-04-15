@@ -5,6 +5,9 @@ var esclient = require('./clients/elasticsearch');
 var stationFilter = require('./modules/stationFilter');
 
 var queue = [];
+var ops = {
+  'backfill': []
+};
 
 /*
  * Error callback.
@@ -42,23 +45,18 @@ var processLog = function (logMeta, next) {
 /*
  * Create backfill queue.
  */
-var processStation = function (station, next) {
-  for (var i = 31; i > 0; i--) {
-    var suffix = i;
-    if (i < 10) {
-      suffix = '0' + suffix;
+var processStation = function (station) {
+  console.log('listLogs() ->', stationFilter.filterString(station + '.', ''));
+  s3client.listLogs(stationFilter.filterString(station + '.', ''), 3500, function (logs) {
+    processLogs(logs);
+    if (stationFilter.year >= 2013) {
+      stationFilter.stepBack();
+      processStation(station);
     }
-    var filter = stationFilter.filterString(station + '.', suffix);
-    s3client.listLogs(filter, 3500, function (logs) {
-      processLogs(logs);
-      next();
-    }, handleError);
-  }
+  }, handleError);
 };
 
-
-
-var takeNext = (function () {
+var processQueue = (function () {
   var i = 0;
   for (var item in queue) {
     if (!queue[item].processed && !queue[item].processing) {
@@ -75,27 +73,36 @@ var takeNext = (function () {
 
 // Run.
 setInterval(function () {
-  
-  console.log('items in queue: ', queue.length);
-  console.log('           new: ', queue.filter(function (item) { return !item.processed; }).length);
-  console.log('     processed: ', queue.filter(function (item) { return item.processed; }).length);
-  console.log('    processing: ', queue.filter(function (item) { return item.processing; }).length);
-  console.log();
+
+  console.log('Total|New|Done|Processing'
+              ,queue.length
+              ,queue.filter(function (item) { return !item.processed; }).length
+              ,queue.filter(function (item) { return item.processed; }).length
+              ,queue.filter(function (item) { return item.processing; }).length
+  );
 
   // Queue.
   if (queue.filter(function (item) { return item.processing; }).length <= 0) {
-    takeNext();
+    processQueue();
   }
 
   // Backfill.
-  if (queue.filter(function (item) { return !item.processed; }).length <= 0) {
-    config.stations.map(function (station) {
-      processStation(station, function () {
-        if (stationFilter.year >= 2013) {
-          stationFilter.stepBack();
-        }
-      });
-    });
+  config.stations.map(function (station) {
+    if (ops.backfill.indexOf(station) < 0) {
+      console.log('Process station', station);
+      ops.backfill.push(station);
+      processStation(station);
+    }
+  });
+
+  if (queue.length == 0) {
+    return;
+  }
+
+  if (queue.filter(function (item) { return item.processing; }).length > 0) {
+    return;
   }
   
-}, 1000);
+  // TODO: process current month.
+
+}, 3000);

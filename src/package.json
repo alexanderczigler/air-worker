@@ -8,16 +8,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/alexanderczigler/air-worker.git"
+    "url": "https://github.com/ilix/air-worker.git"
   },
-  "author": "alexanderczigler",
+  "author": "ilix",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/alexanderczigler/air-worker/issues"
+    "url": "https://github.com/ilix/air-worker/issues"
   },
-  "homepage": "https://github.com/alexanderczigler/air-worker",
+  "homepage": "http://www.ilix.se/air",
   "dependencies": {
     "aws-sdk": "^2.1.21",
-    "elasticsearch": "^4.0.2"
+    "elasticsearch": "^4.0.2",
+    "q": "^1.4.1"
   }
 }

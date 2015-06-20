@@ -20,8 +20,10 @@ var moveLog = function(key, callback) {
 var fillQueue = function () {
   var defer = q.defer();
   s3client.listLogs('new/', 500, function (logs) {
-    console.log('Discovered %n% new logs'.replace('%n%', logs.length));
-    __processQueue = __processQueue.concat(logs);
+    if (logs.length > 0) {
+      console.log('Discovered %n% new logs'.replace('%n%', logs.length));
+      __processQueue = __processQueue.concat(logs);
+    }
     defer.resolve();
   }, defer.reject);
   return defer.promise;
@@ -44,12 +46,14 @@ var handleLogs = function () {
           .catch(function (error) {
             console.log('Could not save log %key% in ElastcSearch'
               .replace('%key%', logMeta.Key));
+            __processQueue.splice(logMeta);
           });
       })
       .catch(function (error) {
         console.log('Could not get log %key% (%message%)'
           .replace('%key%', logMeta.Key)
           .replace('%message%', error));
+        __processQueue.splice(logMeta);
       });
   });
 };

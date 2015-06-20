@@ -9,23 +9,22 @@ var s3 = new AWS.S3();
 module.exports = {
 
   // Gets a specific log.
-  getLog: function(key, successCallback, errorCallback) {
+  getLog: function(key) {
     var params = {
       Bucket: config.s3.bucket,
-      Key: key,
+      Key: key
     };
+    var defer = q.defer();
     s3.getObject(params, function(err, data) {
       if (err) {
-        console.log(err, err.stack);
-        errorCallback(err);
-        return;
+        defer.reject(err);
       }
       if (!data.Body){
-        errorCallback('Missing data.Body');
-        return; 
+        defer.reject('Missing data.Body');
       }
-      successCallback(data.Body.toString());
+      defer.resolve(data);
     });
+    return defer.promise;
   },
 
   // Returns a list result.
@@ -37,7 +36,6 @@ module.exports = {
     };
     s3.listObjects(params, function(err, data) {
       if (err) {
-        console.log(err, err.stack);
         errorCallback(err);
       }
       else {
@@ -57,15 +55,13 @@ module.exports = {
       Bucket: config.s3.bucket,
       Key: oldKey
     };
-    defer = q.defer()
+    var defer = q.defer();
     s3.copyObject(copyParams, function (err) {
       if (err) {
-        console.log('copy err', err);
         defer.reject(err);
       } else {
         s3.deleteObject(deleteParams, function (err){
           if (err) {
-            console.log('delete err', err);
             defer.reject(err);
           } else {
             defer.resolve();

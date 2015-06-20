@@ -1,4 +1,6 @@
 var elasticsearch = require('elasticsearch');
+var q = require('q');
+
 var config = require('../air.config.json');
 var client = new elasticsearch.Client({
   host: config.elasticsearch.host + ':' + config.elasticsearch.port,
@@ -6,18 +8,20 @@ var client = new elasticsearch.Client({
 });
 
 module.exports = {
-  save: function (log, successCallback, errorCallback) {
+  save: function (log) {
+    var defer = q.defer();
     client.index({
       index: config.elasticsearch.index,
       type: 'reading',
       body: log
     }, function (error, response) {
       if (error) {
-        errorCallback(error, response);
+        defer.reject(error);
       }
       else {
-        successCallback(response);
+        defer.resolve(response);
       }
     });
+    return defer.promise;
   }
 };

@@ -1,108 +1,73 @@
 var config = require('./air.config.json');
-
 var s3client = require('./clients/s3');
 var esclient = require('./clients/elasticsearch');
-var stationFilter = require('./modules/stationFilter');
+var q = require('q');
 
-var queue = [];
-var ops = {
-  'backfill': []
+var __processQueue = [];
+
+var moveLog = function(key, callback) {
+  var dest = key.replace('new/', 'imported/');
+  s3client.moveLog(key, dest)
+  .catch(function (error) {
+    console.log('Unable to move %key% (%message%)'
+      .replace('%key%', key)
+      .replace('%message%', error.message)
+    );
+  })
+  .done(callback);
 };
 
-/*
- * Error callback.
- */
-var handleError = function (error, response) {
-  console.log('ERROR', error, response);
+var fillQueue = function () {
+  var defer = q.defer();
+  s3client.listLogs('new/', 500, function (logs) {
+    console.log('Discovered %n% new logs'.replace('%n%', logs.length));
+    __processQueue = __processQueue.concat(logs);
+    defer.resolve();
+  }, defer.reject);
+  return defer.promise;
 };
 
-/*
- * Log handling.
- */
-var processLogs = function (logs) {
-  queue = queue.concat(logs);
+var handleLogs = function () {
+  __processQueue.map(function (logMeta) {
+    s3client.getLog(logMeta.Key)
+      .then(function (log) {
+        delete log.date;
+        delete log.time;
+        esclient.save(log)
+          .then(function () {
+            moveLog(logMeta.Key, function () {
+              console.log('Moved %key% to imported/'.replace('%key%', logMeta.Key));
+              __processQueue.splice(logMeta);
+            });
+          })
+          .catch(function (error) {
+            console.log('Could not save log %key% in ElastcSearch'
+              .replace('%key%', logMeta.Key));
+          });
+      })
+      .catch(function (error) {
+        console.log('Could not get log %key% (%message%)'
+          .replace('%key%', logMeta.Key)
+          .replace('%message%', error));
+      });
+  });
 };
 
-var setProcessed = function (queueItem) {
-  queueItem.processing = false;
-  queueItem.processed = true;
-};
-
-var processLog = function (logMeta, next) {
-  s3client.getLog(logMeta.Key, function (log) {
-    log = JSON.parse(log);
-    delete log.date;
-    delete log.time;
-    if (next) {
-      next();
-    }
-    esclient.save(log, function (response) {
-      
-    }, handleError);
-  }, handleError);
-};
-
-/*
- * Create backfill queue.
- */
-var processStation = function (station) {
-  console.log('listLogs() ->', stationFilter.filterString(station + '.', ''));
-  s3client.listLogs(stationFilter.filterString(station + '.', ''), 3500, function (logs) {
-    processLogs(logs);
-    if (stationFilter.year >= 2013) {
-      stationFilter.stepBack();
-      processStation(station);
-    }
-  }, handleError);
-};
-
-var processQueue = (function () {
-  var i = 0;
-  for (var item in queue) {
-    if (!queue[item].processed && !queue[item].processing) {
-      queue[item].processing = true;
-      var queueItem = queue[item];
-      processLog(queueItem, setProcessed(queueItem));
-      if (i > 10) {
-        break;
-      }
-      i++;
-    }
-  }
-});
+console.log('## air-worker started');
 
 // Run.
-setInterval(function () {
-
-  console.log('Total|New|Done|Processing'
-              ,queue.length
-              ,queue.filter(function (item) { return !item.processed; }).length
-              ,queue.filter(function (item) { return item.processed; }).length
-              ,queue.filter(function (item) { return item.processing; }).length
-  );
-
-  // Queue.
-  if (queue.filter(function (item) { return item.processing; }).length <= 0) {
-    processQueue();
-  }
-
-  // Backfill.
-  config.stations.map(function (station) {
-    if (ops.backfill.indexOf(station) < 0) {
-      console.log('Process station', station);
-      ops.backfill.push(station);
-      processStation(station);
-    }
-  });
-
-  if (queue.length == 0) {
-    return;
-  }
-
-  if (queue.filter(function (item) { return item.processing; }).length > 0) {
-    return;
-  }
+setInterval(function (){
   
-  // TODO: process current month.
+  if (__processQueue.length === 0) {
+    fillQueue()
+    .catch(function (error) {
+      console.log('An error occurred when listing logs (%message%)'.replace('%message%', error.message));
+    })
+    .done(function () {
+      if (__processQueue.length > 0) {
+        handleLogs();
+      }
+    });
+  }
 
-}, 3000);
+}, 10000);

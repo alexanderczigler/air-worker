@@ -31,6 +31,7 @@ var handleLogs = function () {
   __processQueue.map(function (logMeta) {
     s3client.getLog(logMeta.Key)
       .then(function (log) {
+        log = JSON.parse(log);
         delete log.date;
         delete log.time;
         esclient.save(log)

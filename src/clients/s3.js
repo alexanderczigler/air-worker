@@ -22,7 +22,7 @@ module.exports = {
       if (!data.Body){
         defer.reject('Missing data.Body');
       }
-      defer.resolve(data);
+      defer.resolve(data.Body.toString());
     });
     return defer.promise;
   },

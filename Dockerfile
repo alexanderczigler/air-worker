@@ -1,4 +1,4 @@
-FROM dockerfile/nodejs
+FROM node
 ADD ./src /app
 WORKDIR /app
 RUN npm install

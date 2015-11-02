@@ -21,3 +21,23 @@ Create an "air.config.json" file in the src/ folder. Example:
   }
 }
 ```
+
+## Docker-compose // Tutum
+
+```
+elasticsearch:
+  image: alexanderczigler/elasticsearch
+  ports:
+    - "9200:9200"
+    - "9300:9300"
+kibana:
+  image: arcus/kibana
+  links:
+    - elasticsearch
+  ports:
+    - "80:80"
+worker:
+ image: tutum.co/alexanderczigler/air-worker
+ links:
+   - elasticsearch
+```

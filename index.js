@@ -1,11 +1,15 @@
-var config = require('./air.config.json');
-var s3client = require('./clients/s3');
-var esclient = require('./clients/elasticsearch');
+var s3client = require('./lib/clients/s3');
+var esclient = require('./lib/clients/elasticsearch');
 var q = require('q');
 
+var worker = require('./lib/worker')
+
+var __intervalId = 0;
 var __processQueue = [];
 
 var moveLog = function(key, callback) {
+  // S3_PATH_UPLOAD
+  // S3_PATH_ARCHIVE
   var dest = key.replace('new/', 'imported/');
   s3client.moveLog(key, dest)
   .catch(function (error) {
@@ -15,18 +19,6 @@ var moveLog = function(key, callback) {
     );
   })
   .done(callback);
-};
-
-var fillQueue = function () {
-  var defer = q.defer();
-  s3client.listLogs('new/', 500, function (logs) {
-    if (logs.length > 0) {
-      console.log('Discovered %n% new logs'.replace('%n%', logs.length));
-      __processQueue = __processQueue.concat(logs);
-    }
-    defer.resolve();
-  }, defer.reject);
-  return defer.promise;
 };
 
 var handleLogs = function () {
@@ -49,7 +41,7 @@ var handleLogs = function () {
             __processQueue.splice(logMeta);
           });
       })
-      .catch(function (error) {
+      .catch(function (error) { 
         console.log('Could not get log %key% (%message%)'
           .replace('%key%', logMeta.Key)
           .replace('%message%', error));
@@ -60,19 +52,18 @@ var handleLogs = function () {
 
 console.log('## air-worker started');
 
-// Run.
-setInterval(function (){
-  
-  if (__processQueue.length === 0) {
-    fillQueue()
-    .catch(function (error) {
-      console.log('An error occurred when listing logs (%message%)'.replace('%message%', error.message));
-    })
-    .done(function () {
-      if (__processQueue.length > 0) {
-        handleLogs();
-      }
-    });
-  }
+/*
+ * Run.
+ */
+__intervalId = setInterval((function intervalProcess () {
 
-}, 10000);
+  // Add logs to queue.
+  worker.list().then(logs => {
+    console.log('got', logs)
+  })
+
+  // Work the queue.
+  // TODO: actually work the queue.
+
+  return intervalProcess;
+})(), process.env.INTERVAL)

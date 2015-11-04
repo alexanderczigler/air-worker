@@ -18,7 +18,7 @@
   "homepage": "http://www.ilix.se/",
   "dependencies": {
     "aws-sdk": "^2.1.21",
-    "elasticsearch": "^4.0.2",
+    "elasticsearch": "^9.0.0",
     "q": "^1.4.1"
   }
 }

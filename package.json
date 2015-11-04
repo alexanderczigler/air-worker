@@ -15,7 +15,7 @@
   "bugs": {
     "url": "https://github.com/ilix/air-worker/issues"
   },
-  "homepage": "http://www.ilix.se/air",
+  "homepage": "http://www.ilix.se/",
   "dependencies": {
     "aws-sdk": "^2.1.21",
     "elasticsearch": "^4.0.2",

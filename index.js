@@ -1,8 +1,9 @@
-var s3client = require('./lib/clients/s3');
-var esclient = require('./lib/clients/elasticsearch');
-var q = require('q');
+'use strict'
 
+var q = require('q')
 var worker = require('./lib/worker')
+var s3client = require('./lib/clients/s3')
+var esclient = require('./lib/clients/elasticsearch')
 
 var __intervalId = 0;
 var __queue = [];
@@ -36,18 +37,8 @@ var handleLogs = function () {
   });
 };
 
-var traverseQueue = () => {
-  __queue.map(key => {
-    console.log(' => Process', key)
-    worker.get(key).then(log => {
-      // Save to ES
-      log = JSON.parse(log);
-      delete log.date;
-      delete log.time;
+var processLog = (key) => {
 
-      return
-    })
-  })
 }
 
 console.log('## air-worker started');
@@ -58,16 +49,36 @@ console.log('## air-worker started');
 __intervalId = setInterval((function intervalProcess () {
 
   // Add logs to queue.
-  worker.list().then(logs => {
-    logs.map(log => {
-      if (__queue.indexOf(log.Key) === -1) {
-        __queue.push(log.Key)
-      }
+  worker.list()
+    .then(logs => {
+      logs.map(log => {
+        if (__queue.indexOf(log.Key) === -1) {
+          __queue.push(log.Key)
+        }
+      })
     })
-  })
 
   // Work the queue.
-  traverseQueue()
+  __queue.map(key => {
+    console.log(' => Process', key)
+    worker.get(key)
+      .then(log => {
+        log = JSON.parse(log);
+        delete log.date;
+        delete log.time;
+
+        // TODO: Save to ES.
+        return q.promise(resolve => {
+          resolve()
+        })
+      })
+      .then(() => {
+        return s3client.moveLog(key, key.replace(process.env.S3_PATH_UPLOAD, process.env.S3_PATH_ARCHIVE))
+      })
+      .then(() => {
+        __queue.splice(key)
+      })
+    })
 
   return intervalProcess;
 })(), process.env.INTERVAL)

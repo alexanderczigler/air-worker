@@ -2,6 +2,12 @@
 
 Copies weather readings from S3 to elasticsearch
 
+## Run (dev)
+
+```
+env $(cat .env) nodemon
+```
+
 ## Configuration and eco-system
 
 The worker is built to work with data fetched from an S3 bucket and insert data into elasticsearch. Preferably, you should use *docker-compose* or *tutum* to configure and deploy your environment.
